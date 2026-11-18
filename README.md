@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  Native Windows 11 live wallpaper port of <strong>Diffuse</strong> featuring a <strong>WinUI 3</strong> floating system-tray flyout, a <strong>WinUI 3</strong> installer, and a <strong>Direct3D 11 + DirectComposition</strong> shader engine rendered behind desktop icons.
+  Live Wallpaper that shows what you are playing in A fluid-motion manner. A Native Windows 11 port of <strong>Diffuse for Android</strong> featuring a <strong>WinUI 3</strong> floating system-tray flyout + installer.
 </p>
 
 ---
