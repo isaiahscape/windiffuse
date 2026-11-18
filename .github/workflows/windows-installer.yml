@@ -1,0 +1,81 @@
+name: Windows Installer Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'diffuse-windows/**'
+      - '.github/workflows/windows-installer.yml'
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'diffuse-windows/**'
+      - '.github/workflows/windows-installer.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Installer version (e.g. 1.1.0)'
+        required: false
+        default: '1.1.0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-installer:
+    name: Build Windows x64 MSI & Portable Zip
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve package version
+        id: meta
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($ver) -and "${{ github.ref_type }}" -eq "tag") {
+            $ver = "${{ github.ref_name }}".TrimStart('v', 'V')
+          }
+          if ([string]::IsNullOrWhiteSpace($ver)) {
+            $ver = "1.1.0"
+          }
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Publish self-contained app & build MSI
+        shell: pwsh
+        run: |
+          & ".\diffuse-windows\installer\build-installer.ps1" -Version "${{ steps.meta.outputs.version }}"
+
+      - name: Upload Windows installer artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: diffuse-windows-installer
+          path: |
+            diffuse-windows/build/installer/*.msi
+            diffuse-windows/build/installer/*.zip
+          if-no-files-found: error
+
+      - name: Attach Windows artifacts to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Diffuse ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            diffuse-windows/build/installer/*.msi
+            diffuse-windows/build/installer/*.zip
+          token: ${{ secrets.GITHUB_TOKEN }}

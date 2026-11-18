@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>DiffuseWindows</RootNamespace>
+    <AssemblyName>DiffuseWindows</AssemblyName>
+    <ApplicationIcon>assets\diffuse.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.11" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectComposition" Version="3.8.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="src\App.xaml" />
+    <Page Include="src\MainWindow.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="src\App.xaml.cs" />
+    <Compile Include="src\MainWindow.xaml.cs" />
+    <Compile Include="src\AppLogger.cs" />
+    <Compile Include="src\DesktopWallpaperHost.cs" />
+    <Compile Include="src\D3D11DiffuseRenderer.cs" />
+    <Compile Include="src\MediaSessionWatcher.cs" />
+    <Compile Include="src\Settings.cs" />
+    <Compile Include="src\StartupManager.cs" />
+    <Compile Include="src\TrayIconHost.cs" />
+    <Compile Include="src\WallpaperHostWindow.cs" />
+    <Compile Include="src\WasapiAudioMonitor.cs" />
+    <Compile Include="src\Win32Interop.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

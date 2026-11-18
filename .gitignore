@@ -1,0 +1,32 @@
+# Build and publish outputs
+/build/
+bin/
+obj/
+out/
+publish/
+
+# Installer build outputs
+/dist/
+*.msi
+*.exe
+*.wixpdb
+*.zip
+
+# Visual Studio / Rider / IDE user files
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET / NuGet / Logs
+*.log
+*.pdb
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+.wix/
