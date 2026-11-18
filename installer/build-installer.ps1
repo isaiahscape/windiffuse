@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.1.0",
+    [string]$Version = "",
     [string]$Configuration = "Release",
     [switch]$SkipPublish
 )
@@ -14,16 +14,37 @@ $buildRoot = Join-Path $winRoot "build"
 $publishDir = Join-Path $buildRoot "publish-win-x64"
 $outDir = Join-Path $buildRoot "installer"
 
-# Normalize tag/semver input (e.g. "v1.1.0-beta" -> "1.1.0.0" for MSI ProductVersion).
-$cleanVer = $Version.TrimStart('v', 'V')
-if ($cleanVer -match '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?') {
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+$commitHash = $null
+$commitCount = 1
+if ($gitCmd) {
+    $h = (& $gitCmd.Source -C $winRoot rev-parse --short=7 HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($h)) {
+        $commitHash = $h.Trim()
+    }
+    $c = (& $gitCmd.Source -C $winRoot rev-list --count HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0 -and ($c -match '^\d+$')) {
+        $commitCount = [Math]::Max(1, [Math]::Min(65535, [int]$c))
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = if ($commitHash) { $commitHash } else { "dev" }
+}
+
+$packageLabel = $Version.Trim() -replace '[^0-9A-Za-z._-]', '-'
+$cleanSemver = $packageLabel.TrimStart('v', 'V')
+
+# Windows Installer (MSI) and .NET assembly versions require numeric major.minor.patch.build.
+# For commit-hash test builds, derive 0.1.<commitCount>.0 so MajorUpgrade works on every commit.
+if ($cleanSemver -match '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
     $msiVer = "{0}.{1}.{2}.{3}" -f $Matches[1], $Matches[2], $Matches[3], $(if ($Matches[4]) { $Matches[4] } else { "0" })
 }
-elseif ($cleanVer -match '^(\d+)\.(\d+)$') {
+elseif ($cleanSemver -match '^(\d+)\.(\d+)$') {
     $msiVer = "{0}.{1}.0.0" -f $Matches[1], $Matches[2]
 }
 else {
-    throw "Invalid version format '$Version'. Expected semantic version like 1.1.0."
+    $msiVer = "0.1.{0}.0" -f $commitCount
 }
 
 $dotnet = $null
@@ -97,7 +118,7 @@ if (-not $SkipPublish) {
     }
     New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 
-    Write-Host "Publishing self-contained DiffuseWindows v$msiVer..."
+    Write-Host "Publishing self-contained DiffuseWindows ($packageLabel, msi=$msiVer)..."
     & $dotnet publish $csproj `
         -c $Configuration `
         -p:Platform=x64 `
@@ -107,6 +128,7 @@ if (-not $SkipPublish) {
         -p:Version=$msiVer `
         -p:FileVersion=$msiVer `
         -p:AssemblyVersion=$msiVer `
+        -p:InformationalVersion=$packageLabel `
         -o $publishDir
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet publish failed with exit code $LASTEXITCODE"
@@ -117,8 +139,8 @@ if (-not $SkipPublish) {
 Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$msiPath = Join-Path $outDir ("Diffuse-{0}-win-x64.msi" -f $cleanVer)
-$zipPath = Join-Path $outDir ("Diffuse-{0}-win-x64-portable.zip" -f $cleanVer)
+$msiPath = Join-Path $outDir ("Diffuse-{0}-win-x64.msi" -f $packageLabel)
+$zipPath = Join-Path $outDir ("Diffuse-{0}-win-x64-portable.zip" -f $packageLabel)
 if (Test-Path $msiPath) { Remove-Item -LiteralPath $msiPath -Force }
 if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 

@@ -1,0 +1,85 @@
+name: Release Windows Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Optional release tag (defaults to build-<commit-hash>)'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark release as prerelease (test build)'
+        type: boolean
+        required: false
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build & Publish Windows Release Package
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve commit hash & release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $sha7 = (git rev-parse --short=7 HEAD).Trim()
+          $pkgVer = $sha7
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $releaseTag = "${{ github.ref_name }}"
+            $isPrerelease = "false"
+          } else {
+            $customTag = "${{ inputs.tag }}".Trim()
+            $releaseTag = if ([string]::IsNullOrWhiteSpace($customTag)) { "build-$sha7" } else { $customTag }
+            $isPrerelease = if ("${{ inputs.prerelease }}" -eq "true") { "true" } else { "false" }
+          }
+          "version=$pkgVer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$releaseTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prerelease=$isPrerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Publish self-contained app & build MSI
+        shell: pwsh
+        run: |
+          & ".\installer\build-installer.ps1" -Version "${{ steps.meta.outputs.version }}"
+
+      - name: Upload release workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: diffuse-windows-${{ steps.meta.outputs.version }}
+          path: |
+            build/installer/*.msi
+            build/installer/*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: "Diffuse for Windows (${{ steps.meta.outputs.version }})"
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            build/installer/*.msi
+            build/installer/*.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
