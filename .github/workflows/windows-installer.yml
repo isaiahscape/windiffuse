@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build-installer:
-    name: Build Windows x64 MSI & Portable Zip
+    name: Build Windows x64 WinUI 3 Setup & Portable Zip
     runs-on: windows-latest
 
     steps:
@@ -44,7 +44,7 @@ jobs:
           }
           "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Publish self-contained app & build MSI
+      - name: Publish self-contained app & build WinUI 3 installer
         shell: pwsh
         run: |
           & ".\installer\build-installer.ps1" -Version "${{ steps.meta.outputs.version }}"
@@ -54,6 +54,6 @@ jobs:
         with:
           name: diffuse-windows-${{ steps.meta.outputs.version }}
           path: |
-            build/installer/*.msi
+            build/installer/*.exe
             build/installer/*.zip
           if-no-files-found: error

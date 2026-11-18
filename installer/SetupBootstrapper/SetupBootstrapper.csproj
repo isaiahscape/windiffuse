@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <AssemblyName>DiffuseSetup</AssemblyName>
+    <RootNamespace>DiffuseSetup</RootNamespace>
+    <ApplicationIcon>..\..\assets\diffuse.ico</ApplicationIcon>
+    <ApplicationManifest>..\..\app.manifest</ApplicationManifest>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(PayloadZipPath)')">
+    <EmbeddedResource Include="$(PayloadZipPath)" LogicalName="payload.zip" />
+  </ItemGroup>
+</Project>

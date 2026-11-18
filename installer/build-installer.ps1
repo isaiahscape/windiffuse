@@ -9,9 +9,10 @@ $ErrorActionPreference = "Stop"
 $installerDir = $PSScriptRoot
 $winRoot = Split-Path -Parent $installerDir
 $csproj = Join-Path $winRoot "DiffuseWindows.csproj"
-$assetsDir = Join-Path $winRoot "assets"
+$bootstrapCsproj = Join-Path $installerDir "SetupBootstrapper\SetupBootstrapper.csproj"
 $buildRoot = Join-Path $winRoot "build"
 $publishDir = Join-Path $buildRoot "publish-win-x64"
+$bootstrapOutDir = Join-Path $buildRoot "setup-stage"
 $outDir = Join-Path $buildRoot "installer"
 
 $gitCmd = Get-Command git -ErrorAction SilentlyContinue
@@ -35,16 +36,14 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 $packageLabel = $Version.Trim() -replace '[^0-9A-Za-z._-]', '-'
 $cleanSemver = $packageLabel.TrimStart('v', 'V')
 
-# Windows Installer (MSI) and .NET assembly versions require numeric major.minor.patch.build.
-# For commit-hash test builds, derive 0.1.<commitCount>.0 so MajorUpgrade works on every commit.
 if ($cleanSemver -match '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
-    $msiVer = "{0}.{1}.{2}.{3}" -f $Matches[1], $Matches[2], $Matches[3], $(if ($Matches[4]) { $Matches[4] } else { "0" })
+    $asmVer = "{0}.{1}.{2}.{3}" -f $Matches[1], $Matches[2], $Matches[3], $(if ($Matches[4]) { $Matches[4] } else { "0" })
 }
 elseif ($cleanSemver -match '^(\d+)\.(\d+)$') {
-    $msiVer = "{0}.{1}.0.0" -f $Matches[1], $Matches[2]
+    $asmVer = "{0}.{1}.0.0" -f $Matches[1], $Matches[2]
 }
 else {
-    $msiVer = "0.1.{0}.0" -f $commitCount
+    $asmVer = "0.1.{0}.0" -f $commitCount
 }
 
 $dotnet = $null
@@ -72,62 +71,22 @@ if (-not $dotnet) {
     throw "No .NET 8 SDK found."
 }
 
-$wix = $null
-$sysWix = Get-Command wix -ErrorAction SilentlyContinue
-if ($sysWix) {
-    $wix = $sysWix.Source
-}
-if (-not $wix) {
-    $wixCandidates = @(
-        (Join-Path (Split-Path -Parent $winRoot) "diffuse\tools\wix\wix.exe"),
-        (Join-Path (Split-Path -Parent $winRoot) "..\tools\wix\wix.exe"),
-        (Join-Path $buildRoot "tools\wix\wix.exe")
-    )
-    foreach ($cand in $wixCandidates) {
-        $resolved = [System.IO.Path]::GetFullPath($cand)
-        if (Test-Path $resolved) {
-            $wix = $resolved
-            break
-        }
-    }
-}
-if (-not $wix) {
-    $localWixDir = Join-Path $buildRoot "tools\wix"
-    $localWixExe = Join-Path $localWixDir "wix.exe"
-    New-Item -ItemType Directory -Force -Path $localWixDir | Out-Null
-    & $dotnet tool install wix --version 6.0.2 --tool-path $localWixDir
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install WiX Toolset 6.0.2 CLI."
-    }
-    $wix = $localWixExe
-}
-
-$extList = & $wix extension list -g 2>$null | Out-String
-if ($extList -notmatch "WixToolset\.UI\.wixext") {
-    & $wix extension add -g WixToolset.UI.wixext/6.0.2
-    if ($LASTEXITCODE -ne 0) { throw "Failed to add WixToolset.UI.wixext." }
-}
-if ($extList -notmatch "WixToolset\.Util\.wixext") {
-    & $wix extension add -g WixToolset.Util.wixext/6.0.2
-    if ($LASTEXITCODE -ne 0) { throw "Failed to add WixToolset.Util.wixext." }
-}
-
 if (-not $SkipPublish) {
     if (Test-Path $publishDir) {
         Remove-Item -LiteralPath $publishDir -Recurse -Force
     }
     New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 
-    Write-Host "Publishing self-contained DiffuseWindows ($packageLabel, msi=$msiVer)..."
+    Write-Host "Publishing self-contained DiffuseWindows ($packageLabel, ver=$asmVer)..."
     & $dotnet publish $csproj `
         -c $Configuration `
         -p:Platform=x64 `
         -r win-x64 `
         --self-contained true `
         -p:WindowsAppSDKSelfContained=true `
-        -p:Version=$msiVer `
-        -p:FileVersion=$msiVer `
-        -p:AssemblyVersion=$msiVer `
+        -p:Version=$asmVer `
+        -p:FileVersion=$asmVer `
+        -p:AssemblyVersion=$asmVer `
         -p:InformationalVersion=$packageLabel `
         -o $publishDir
     if ($LASTEXITCODE -ne 0) {
@@ -139,27 +98,37 @@ if (-not $SkipPublish) {
 Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$msiPath = Join-Path $outDir ("Diffuse-{0}-win-x64.msi" -f $packageLabel)
 $zipPath = Join-Path $outDir ("Diffuse-{0}-win-x64-portable.zip" -f $packageLabel)
-if (Test-Path $msiPath) { Remove-Item -LiteralPath $msiPath -Force }
+$setupExePath = Join-Path $outDir ("DiffuseSetup-{0}-win-x64.exe" -f $packageLabel)
 if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
-
-Write-Host "Building MSI package $msiPath..."
-& $wix build (Join-Path $installerDir "Package.wxs") `
-    -ext WixToolset.UI.wixext `
-    -ext WixToolset.Util.wixext `
-    -arch x64 `
-    -d "Version=$msiVer" `
-    -d "PublishDir=$publishDir" `
-    -d "AssetsDir=$assetsDir" `
-    -d "InstallerDir=$installerDir" `
-    -o $msiPath
-if ($LASTEXITCODE -ne 0) {
-    throw "wix build failed with exit code $LASTEXITCODE"
-}
+if (Test-Path $setupExePath) { Remove-Item -LiteralPath $setupExePath -Force }
 
 Write-Host "Packaging portable zip $zipPath..."
 Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
 
-Write-Host "Created installer: $msiPath"
+if (Test-Path $bootstrapOutDir) {
+    Remove-Item -LiteralPath $bootstrapOutDir -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $bootstrapOutDir | Out-Null
+
+Write-Host "Building WinUI 3 single-file installer $setupExePath..."
+& $dotnet publish $bootstrapCsproj `
+    -c $Configuration `
+    -p:PayloadZipPath="$zipPath" `
+    -p:Version=$asmVer `
+    -p:FileVersion=$asmVer `
+    -p:AssemblyVersion=$asmVer `
+    -p:InformationalVersion=$packageLabel `
+    -o $bootstrapOutDir
+if ($LASTEXITCODE -ne 0) {
+    throw "SetupBootstrapper publish failed with exit code $LASTEXITCODE"
+}
+
+$builtSetup = Join-Path $bootstrapOutDir "DiffuseSetup.exe"
+if (-not (Test-Path $builtSetup)) {
+    throw "Expected bootstrapper output not found: $builtSetup"
+}
+Copy-Item -LiteralPath $builtSetup -Destination $setupExePath -Force
+
+Write-Host "Created WinUI 3 installer: $setupExePath"
 Write-Host "Created portable zip: $zipPath"

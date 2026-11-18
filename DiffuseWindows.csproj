@@ -31,10 +31,13 @@
   <ItemGroup>
     <ApplicationDefinition Include="src\App.xaml" />
     <Page Include="src\MainWindow.xaml" />
+    <Page Include="src\InstallerWindow.xaml" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="src\App.xaml.cs" />
+    <Compile Include="src\InstallerEngine.cs" />
+    <Compile Include="src\InstallerWindow.xaml.cs" />
     <Compile Include="src\MainWindow.xaml.cs" />
     <Compile Include="src\AppLogger.cs" />
     <Compile Include="src\DesktopWallpaperHost.cs" />

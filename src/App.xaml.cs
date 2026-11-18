@@ -17,6 +17,7 @@ namespace DiffuseWindows
         private AppSettings _settings;
         private readonly List<WallpaperHostWindow> _hosts = new List<WallpaperHostWindow>();
         private MainWindow _mainWindow;
+        private InstallerWindow _installerWindow;
         private TrayIconHost _trayIcon;
         private MediaSessionWatcher _mediaWatcher;
         private WasapiAudioMonitor _audioMonitor;
@@ -64,6 +65,59 @@ namespace DiffuseWindows
             }
             catch { }
 
+            string[] cmdArgs = Environment.GetCommandLineArgs();
+            bool isInstallMode = false;
+            bool isUninstallMode = false;
+            bool isSilentMode = false;
+            string sourceDir = AppContext.BaseDirectory.TrimEnd('\\');
+
+            for (int i = 0; i < cmdArgs.Length; i++)
+            {
+                if (string.Equals(cmdArgs[i], "--install", StringComparison.OrdinalIgnoreCase))
+                {
+                    isInstallMode = true;
+                }
+                else if (string.Equals(cmdArgs[i], "--uninstall", StringComparison.OrdinalIgnoreCase))
+                {
+                    isUninstallMode = true;
+                }
+                else if (string.Equals(cmdArgs[i], "--silent", StringComparison.OrdinalIgnoreCase))
+                {
+                    isSilentMode = true;
+                }
+                else if (string.Equals(cmdArgs[i], "--source-dir", StringComparison.OrdinalIgnoreCase) && i + 1 < cmdArgs.Length)
+                {
+                    sourceDir = cmdArgs[++i];
+                }
+            }
+
+            if (isInstallMode || isUninstallMode)
+            {
+                if (isSilentMode)
+                {
+                    if (isUninstallMode)
+                    {
+                        string dir = InstallerEngine.GetInstalledDirectory() ?? AppContext.BaseDirectory.TrimEnd('\\');
+                        InstallerEngine.UninstallAsync(dir, removeUserData: false, progress: null).GetAwaiter().GetResult();
+                    }
+                    else
+                    {
+                        string existingDir;
+                        string targetDir = InstallerEngine.IsAlreadyInstalled(out existingDir)
+                            ? existingDir
+                            : InstallerEngine.DefaultInstallDirectory;
+                        InstallerEngine.InstallAsync(sourceDir, targetDir, enableStartup: true, createDesktopShortcut: false, progress: null).GetAwaiter().GetResult();
+                        InstallerEngine.LaunchInstalledApp(targetDir, showUi: false);
+                    }
+                    Exit();
+                    return;
+                }
+
+                _installerWindow = new InstallerWindow(isUninstallMode, sourceDir);
+                _installerWindow.Activate();
+                return;
+            }
+
             bool createdNew;
             _instanceMutex = new Mutex(true, "Global\\DiffuseWindowsSingleInstance", out createdNew);
             if (!createdNew)
@@ -75,7 +129,6 @@ namespace DiffuseWindows
             AppLogger.Reset();
             AppLogger.Info("DiffuseWindows (WinUI 3) starting");
 
-            string[] cmdArgs = Environment.GetCommandLineArgs();
             for (int i = 0; i < cmdArgs.Length; i++)
             {
                 if (string.Equals(cmdArgs[i], "--preview", StringComparison.OrdinalIgnoreCase))
