@@ -16,10 +16,16 @@ if ($sysDotnet) {
     }
 }
 if (-not $dotnet) {
-    $localDotnet = Join-Path (Split-Path -Parent $root) "..\tools\dotnet8\dotnet.exe"
-    $localDotnet = [System.IO.Path]::GetFullPath($localDotnet)
-    if (Test-Path $localDotnet) {
-        $dotnet = $localDotnet
+    $candidates = @(
+        (Join-Path (Split-Path -Parent $root) "diffuse\tools\dotnet8\dotnet.exe"),
+        (Join-Path (Split-Path -Parent $root) "..\tools\dotnet8\dotnet.exe")
+    )
+    foreach ($cand in $candidates) {
+        $resolved = [System.IO.Path]::GetFullPath($cand)
+        if (Test-Path $resolved) {
+            $dotnet = $resolved
+            break
+        }
     }
 }
 if (-not $dotnet) {

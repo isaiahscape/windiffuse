@@ -27,6 +27,7 @@ namespace DiffuseWindows
         [DataMember] public bool PauseOnFullscreen = true;
         [DataMember] public bool SpanAllMonitors = true;
         [DataMember] public bool AttachToDesktop = true;
+        [DataMember] public bool StartupConfigured = false;
 
         private static string SettingsDirectory
         {

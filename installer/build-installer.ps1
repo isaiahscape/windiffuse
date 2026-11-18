@@ -35,9 +35,16 @@ if ($sysDotnet) {
     }
 }
 if (-not $dotnet) {
-    $localDotnet = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $winRoot) "..\tools\dotnet8\dotnet.exe"))
-    if (Test-Path $localDotnet) {
-        $dotnet = $localDotnet
+    $candidates = @(
+        (Join-Path (Split-Path -Parent $winRoot) "diffuse\tools\dotnet8\dotnet.exe"),
+        (Join-Path (Split-Path -Parent $winRoot) "..\tools\dotnet8\dotnet.exe")
+    )
+    foreach ($cand in $candidates) {
+        $resolved = [System.IO.Path]::GetFullPath($cand)
+        if (Test-Path $resolved) {
+            $dotnet = $resolved
+            break
+        }
     }
 }
 if (-not $dotnet) {
@@ -50,14 +57,26 @@ if ($sysWix) {
     $wix = $sysWix.Source
 }
 if (-not $wix) {
-    $localWixDir = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $winRoot) "..\tools\wix"))
-    $localWixExe = Join-Path $localWixDir "wix.exe"
-    if (-not (Test-Path $localWixExe)) {
-        New-Item -ItemType Directory -Force -Path $localWixDir | Out-Null
-        & $dotnet tool install wix --version 6.0.2 --tool-path $localWixDir
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to install WiX Toolset 6.0.2 CLI."
+    $wixCandidates = @(
+        (Join-Path (Split-Path -Parent $winRoot) "diffuse\tools\wix\wix.exe"),
+        (Join-Path (Split-Path -Parent $winRoot) "..\tools\wix\wix.exe"),
+        (Join-Path $buildRoot "tools\wix\wix.exe")
+    )
+    foreach ($cand in $wixCandidates) {
+        $resolved = [System.IO.Path]::GetFullPath($cand)
+        if (Test-Path $resolved) {
+            $wix = $resolved
+            break
         }
+    }
+}
+if (-not $wix) {
+    $localWixDir = Join-Path $buildRoot "tools\wix"
+    $localWixExe = Join-Path $localWixDir "wix.exe"
+    New-Item -ItemType Directory -Force -Path $localWixDir | Out-Null
+    & $dotnet tool install wix --version 6.0.2 --tool-path $localWixDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install WiX Toolset 6.0.2 CLI."
     }
     $wix = $localWixExe
 }

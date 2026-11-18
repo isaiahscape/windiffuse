@@ -74,8 +74,6 @@ namespace DiffuseWindows
 
             AppLogger.Reset();
             AppLogger.Info("DiffuseWindows (WinUI 3) starting");
-            StartupManager.SyncExecutablePathIfEnabled();
-            AppLogger.Info(string.Format("Windows startup enabled={0}", StartupManager.IsEnabled()));
 
             string[] cmdArgs = Environment.GetCommandLineArgs();
             for (int i = 0; i < cmdArgs.Length; i++)
@@ -93,6 +91,18 @@ namespace DiffuseWindows
             }
 
             _settings = AppSettings.Load();
+            if (!_settings.StartupConfigured)
+            {
+                if (StartupManager.SetEnabled(true))
+                {
+                    _settings.StartupConfigured = true;
+                }
+            }
+            else
+            {
+                StartupManager.SyncExecutablePathIfEnabled();
+            }
+            AppLogger.Info(string.Format("Windows startup enabled={0}", StartupManager.IsEnabled()));
             _settings.Save();
 
             _mainWindow = new MainWindow(
