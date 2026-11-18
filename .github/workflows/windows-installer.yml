@@ -5,15 +5,9 @@ on:
     branches:
       - main
       - master
-    paths:
-      - 'diffuse-windows/**'
-      - '.github/workflows/windows-installer.yml'
     tags:
       - 'v*'
   pull_request:
-    paths:
-      - 'diffuse-windows/**'
-      - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
     inputs:
       version:
@@ -58,15 +52,15 @@ jobs:
       - name: Publish self-contained app & build MSI
         shell: pwsh
         run: |
-          & ".\diffuse-windows\installer\build-installer.ps1" -Version "${{ steps.meta.outputs.version }}"
+          & ".\installer\build-installer.ps1" -Version "${{ steps.meta.outputs.version }}"
 
       - name: Upload Windows installer artifacts
         uses: actions/upload-artifact@v6
         with:
           name: diffuse-windows-installer
           path: |
-            diffuse-windows/build/installer/*.msi
-            diffuse-windows/build/installer/*.zip
+            build/installer/*.msi
+            build/installer/*.zip
           if-no-files-found: error
 
       - name: Attach Windows artifacts to GitHub Release
@@ -76,6 +70,6 @@ jobs:
           name: "Diffuse ${{ github.ref_name }}"
           generate_release_notes: true
           files: |
-            diffuse-windows/build/installer/*.msi
-            diffuse-windows/build/installer/*.zip
+            build/installer/*.msi
+            build/installer/*.zip
           token: ${{ secrets.GITHUB_TOKEN }}
