@@ -197,12 +197,44 @@
                             </StackPanel>
                             <StackPanel Grid.Column="1" Spacing="2">
                                 <Grid>
-                                    <TextBlock Text="Opacity" FontSize="12.5" />
-                                    <TextBlock x:Name="OpacityValueText" Text="100%" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Text="Saturation" FontSize="12.5" />
+                                    <TextBlock x:Name="SaturationValueText" Text="1.00x" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
-                                <Slider x:Name="OpacitySlider" Minimum="25" Maximum="255" StepFrequency="5" SnapsTo="StepValues" />
+                                <Slider x:Name="SaturationSlider" Minimum="0.00" Maximum="2.00" StepFrequency="0.05" SnapsTo="StepValues" />
                             </StackPanel>
                         </Grid>
+
+                        <StackPanel Spacing="2">
+                            <Grid>
+                                <TextBlock Text="Opacity" FontSize="12.5" />
+                                <TextBlock x:Name="OpacityValueText" Text="100%" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                            <Slider x:Name="OpacitySlider" Minimum="25" Maximum="255" StepFrequency="5" SnapsTo="StepValues" />
+                        </StackPanel>
+
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="180" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="HDR output" />
+                                <TextBlock Text="16-bit scRGB on HDR displays" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <ComboBox x:Name="HdrModeCombo" Grid.Column="1" HorizontalAlignment="Stretch">
+                                <ComboBoxItem Content="Auto (Display HDR)" Tag="auto" />
+                                <ComboBoxItem Content="Force On (scRGB)" Tag="on" />
+                                <ComboBoxItem Content="Off (SDR)" Tag="off" />
+                            </ComboBox>
+                        </Grid>
+
+                        <StackPanel x:Name="HdrIntensityPanel" Spacing="2">
+                            <Grid>
+                                <TextBlock Text="HDR peak boost" FontSize="12.5" />
+                                <TextBlock x:Name="HdrIntensityValueText" Text="1.60x" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                            <Slider x:Name="HdrIntensitySlider" Minimum="0.50" Maximum="3.50" StepFrequency="0.05" SnapsTo="StepValues" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

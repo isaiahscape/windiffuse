@@ -15,6 +15,9 @@ namespace DiffuseWindows
         [DataMember] public float SpeedMin = 0.05f;
         [DataMember] public float SpeedMax = 0.50f;
         [DataMember] public float BrightnessOffset = 0.0f;
+        [DataMember] public float Saturation = 1.0f;
+        [DataMember] public string HdrMode = "auto";
+        [DataMember] public float HdrIntensity = 1.6f;
         [DataMember] public bool EnableLiveBeats = false;
         [DataMember] public float BeatStrength = 0.5f;
         [DataMember] public bool PerformanceMode = false;
@@ -56,10 +59,16 @@ namespace DiffuseWindows
             {
                 PostProcessingMode = "blur";
             }
+            if (HdrMode != "auto" && HdrMode != "on" && HdrMode != "off")
+            {
+                HdrMode = "auto";
+            }
             NoiseScale = ClampFloat(NoiseScale, 0.05f, 2.5f);
             SpeedMin = ClampFloat(SpeedMin, 0.0f, 2.0f);
             SpeedMax = ClampFloat(SpeedMax, SpeedMin, 3.0f);
             BrightnessOffset = ClampFloat(BrightnessOffset, -1.0f, 1.0f);
+            Saturation = ClampFloat(Saturation, 0.0f, 2.0f);
+            HdrIntensity = ClampFloat(HdrIntensity, 0.5f, 3.5f);
             BeatStrength = ClampFloat(BeatStrength, 0.0f, 2.0f);
             if (WallpaperOpacity < 25) WallpaperOpacity = 25;
             if (WallpaperOpacity > 255) WallpaperOpacity = 255;

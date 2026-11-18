@@ -32,6 +32,10 @@ namespace DiffuseWindows
             public float TimeScaled;
             public float NumSegments;
             public int PreCompute;
+            public float Saturation;
+            public float HdrIntensity;
+            public int OutputHdr;
+            public int IsFinalPass;
             public float Pad0;
             public float Pad1;
         }
@@ -75,18 +79,47 @@ cbuffer Params : register(b0) {
     float  u_timeScaled;
     float  u_numSegments;
     int    u_pre_compute;
+    float  u_saturation;
+    float  u_hdrIntensity;
+    int    u_outputHdr;
+    int    u_isFinalPass;
     float2 _pad;
 };
 struct PSIn {
     float4 pos : SV_Position;
     float2 uv  : TEXCOORD0;
-};";
+};
+float3 SrgbToLinear(float3 c) {
+    float3 low = c / 12.92;
+    float3 high = pow(max((c + 0.055) / 1.055, 0.0), 2.4);
+    return lerp(high, low, step(c, 0.04045));
+}
+float4 ApplyFinalOutput(float4 c) {
+    if (u_isFinalPass == 0) {
+        return c;
+    }
+    float3 rgb = max(c.rgb, 0.0);
+    float luma = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+    rgb = max(0.0, lerp(float3(luma, luma, luma), rgb, u_saturation));
+    if (u_outputHdr != 0) {
+        float3 lin = SrgbToLinear(rgb);
+        float linLuma = dot(lin, float3(0.2126, 0.7152, 0.0722));
+        float paperWhite = 1.65 * u_hdrIntensity;
+        float highlightBoost = 1.0 + max(0.0, u_hdrIntensity - 1.0) * 0.45 * pow(saturate(linLuma), 1.35);
+        rgb = lin * paperWhite * highlightBoost;
+    }
+    return float4(rgb, 1.0);
+}";
 
         private const string ColorPsHlsl = ParamsHeaderHlsl + @"
 Texture2D tex0 : register(t0);
 SamplerState samp0 : register(s0);
 float4 main(PSIn input) : SV_Target {
-    return tex0.Sample(samp0, input.uv);
+    float4 c = tex0.Sample(samp0, input.uv);
+    if (u_isFinalPass != 0) {
+        c.rgb *= (1.0 + u_brightnessOffset);
+    }
+    return ApplyFinalOutput(c);
 }";
 
         private const string KawaseBlurPsHlsl = ParamsHeaderHlsl + @"
@@ -102,7 +135,7 @@ float4 main(PSIn input) : SV_Target {
     color += tex0.Sample(samp0, input.uv - step2) * 0.25;
     color.rgb *= (1.0 + u_brightnessOffset);
     color.a = 1.0;
-    return color;
+    return ApplyFinalOutput(color);
 }";
 
         private const string FadePsHlsl = ParamsHeaderHlsl + @"
@@ -217,7 +250,8 @@ float4 main(PSIn input) : SV_Target {
     float leftGradientStrength = smoothstep(0.1, 0.0, localUVx);
     color = lerp(color, float4(1.0, 1.0, 1.0, leftGradientStrength), leftGradientStrength * u_light_strength);
 
-    return float4(color.rgb, 1.0);
+    color.rgb *= (1.0 + u_brightnessOffset);
+    return ApplyFinalOutput(float4(color.rgb, 1.0));
 }";
 
         private ID3D11Device _device;
@@ -251,6 +285,12 @@ float4 main(PSIn input) : SV_Target {
 
         private int _width;
         private int _height;
+        private IntPtr _hwnd;
+        private bool _displayHdrActive;
+        private bool _activeHdr;
+        private string _hdrMode = "auto";
+        private float _saturation = 1.0f;
+        private float _hdrIntensity = 1.6f;
 
         private bool _playing;
         private float _minSpeed = 0.05f;
@@ -273,6 +313,7 @@ float4 main(PSIn input) : SV_Target {
 
         public void Initialize(IntPtr hwnd, int width, int height)
         {
+            _hwnd = hwnd;
             _width = Math.Max(1, width);
             _height = Math.Max(1, height);
 
@@ -283,10 +324,11 @@ float4 main(PSIn input) : SV_Target {
                 FeatureLevel.Level_10_0
             };
 
-            bool dcompReady = TryInitializeDirectComposition(hwnd, levels);
-            if (!dcompReady)
+            CreateD3D11Device(levels);
+            UpdateDisplayHdrCapability();
+            if (!TryInitializeDirectCompositionSwapChain(hwnd))
             {
-                InitializeHwndSwapChainFallback(hwnd, levels);
+                InitializeHwndSwapChainFallback(hwnd);
             }
 
             CreateBackBufferRtv();
@@ -323,13 +365,22 @@ float4 main(PSIn input) : SV_Target {
             _width = width;
             _height = height;
 
-            _context.OMSetRenderTargets(Array.Empty<ID3D11RenderTargetView>());
-            if (_backBufferRtv != null) { _backBufferRtv.Dispose(); _backBufferRtv = null; }
-            _swapChain.ResizeBuffers(0, (uint)_width, (uint)_height, Format.B8G8R8A8_UNorm, SwapChainFlags.None);
-            CreateBackBufferRtv();
-            if (_usingDComp && _dcompDevice != null)
+            UpdateDisplayHdrCapability();
+            if (_activeHdr != ShouldUseHdr())
             {
-                _dcompDevice.Commit();
+                RecreateSwapChain();
+            }
+            else
+            {
+                _context.OMSetRenderTargets(Array.Empty<ID3D11RenderTargetView>());
+                if (_backBufferRtv != null) { _backBufferRtv.Dispose(); _backBufferRtv = null; }
+                Format fmt = _activeHdr ? Format.R16G16B16A16_Float : Format.B8G8R8A8_UNorm;
+                _swapChain.ResizeBuffers(0, (uint)_width, (uint)_height, fmt, SwapChainFlags.None);
+                CreateBackBufferRtv();
+                if (_usingDComp && _dcompDevice != null)
+                {
+                    _dcompDevice.Commit();
+                }
             }
 
             if (_screenFbo != null) { _screenFbo.Dispose(); _screenFbo = null; }
@@ -343,6 +394,12 @@ float4 main(PSIn input) : SV_Target {
             _maxSpeed = settings.SpeedMax;
             _targetSpeed = _playing ? _maxSpeed : _minSpeed;
             _brightnessOffset = settings.BrightnessOffset * 0.05f;
+            _saturation = settings.Saturation;
+            _hdrIntensity = settings.HdrIntensity;
+            string nextHdrMode = string.IsNullOrEmpty(settings.HdrMode) ? "auto" : settings.HdrMode;
+            bool hdrModeChanged = !string.Equals(_hdrMode, nextHdrMode, StringComparison.OrdinalIgnoreCase);
+            _hdrMode = nextHdrMode;
+
             _postProcessingMode = settings.PostProcessingMode;
             _performanceMode = settings.PerformanceMode;
             _beatStrength = settings.BeatStrength;
@@ -350,6 +407,15 @@ float4 main(PSIn input) : SV_Target {
             if (!settings.EnableLiveBeats)
             {
                 _targetBeat = 0.0f;
+            }
+
+            if (hdrModeChanged && _device != null && _hwnd != IntPtr.Zero)
+            {
+                UpdateDisplayHdrCapability();
+                if (_activeHdr != ShouldUseHdr())
+                {
+                    RecreateSwapChain();
+                }
             }
         }
 
@@ -452,6 +518,7 @@ float4 main(PSIn input) : SV_Target {
 
             // Pass 3: Upscale/post-process screenFbo -> DXGI SwapChain backbuffer
             float aspectRatio = (float)_width / (float)_height;
+            int outputHdrFlag = _activeHdr ? 1 : 0;
             if (_postProcessingMode == "blur")
             {
                 var blurParams = new ShaderParams
@@ -459,7 +526,11 @@ float4 main(PSIn input) : SV_Target {
                     ResX = Math.Max(1f, _width * 0.5f),
                     ResY = Math.Max(1f, _height * 0.5f),
                     BrightnessOffset = _brightnessOffset,
-                    Level = 1f
+                    Level = 1f,
+                    Saturation = _saturation,
+                    HdrIntensity = _hdrIntensity,
+                    OutputHdr = outputHdrFlag,
+                    IsFinalPass = 1
                 };
                 DrawPass(_backBufferRtv, _width, _height, _blurPs, _screenFbo.Srv, null, null, _samplerClamp, _samplerWrap, blurParams);
             }
@@ -467,13 +538,26 @@ float4 main(PSIn input) : SV_Target {
             {
                 var glassParams = new ShaderParams
                 {
-                    NumSegments = 16.0f * aspectRatio
+                    BrightnessOffset = _brightnessOffset,
+                    NumSegments = 16.0f * aspectRatio,
+                    Saturation = _saturation,
+                    HdrIntensity = _hdrIntensity,
+                    OutputHdr = outputHdrFlag,
+                    IsFinalPass = 1
                 };
                 DrawPass(_backBufferRtv, _width, _height, _glassPs, _screenFbo.Srv, null, null, _samplerClamp, _samplerWrap, glassParams);
             }
             else
             {
-                DrawPass(_backBufferRtv, _width, _height, _colorPs, _screenFbo.Srv, null, null, _samplerClamp, _samplerWrap, new ShaderParams());
+                var colorParams = new ShaderParams
+                {
+                    BrightnessOffset = _brightnessOffset,
+                    Saturation = _saturation,
+                    HdrIntensity = _hdrIntensity,
+                    OutputHdr = outputHdrFlag,
+                    IsFinalPass = 1
+                };
+                DrawPass(_backBufferRtv, _width, _height, _colorPs, _screenFbo.Srv, null, null, _samplerClamp, _samplerWrap, colorParams);
             }
 
             _swapChain.Present(useVsync ? 1u : 0u, PresentFlags.None);
@@ -515,30 +599,70 @@ float4 main(PSIn input) : SV_Target {
             _context.PSSetShaderResource(2, null);
         }
 
-        private bool TryInitializeDirectComposition(IntPtr hwnd, FeatureLevel[] levels)
+        private void CreateD3D11Device(FeatureLevel[] levels)
         {
-            try
+            Result hr = D3D11.D3D11CreateDevice(
+                null,
+                DriverType.Hardware,
+                DeviceCreationFlags.BgraSupport,
+                levels,
+                out _device,
+                out _context
+            );
+            if (hr.Failure)
             {
-                Result hr = D3D11.D3D11CreateDevice(
+                D3D11.D3D11CreateDevice(
                     null,
-                    DriverType.Hardware,
+                    DriverType.Warp,
                     DeviceCreationFlags.BgraSupport,
                     levels,
                     out _device,
                     out _context
-                );
-                if (hr.Failure)
-                {
-                    D3D11.D3D11CreateDevice(
-                        null,
-                        DriverType.Warp,
-                        DeviceCreationFlags.BgraSupport,
-                        levels,
-                        out _device,
-                        out _context
-                    ).CheckError();
-                }
+                ).CheckError();
+            }
+        }
 
+        private bool ShouldUseHdr()
+        {
+            if (string.Equals(_hdrMode, "off", StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.Equals(_hdrMode, "on", StringComparison.OrdinalIgnoreCase)) return true;
+            return _displayHdrActive;
+        }
+
+        private void UpdateDisplayHdrCapability()
+        {
+            _displayHdrActive = false;
+            if (_device == null) return;
+            try
+            {
+                using (IDXGIDevice dxgiDevice = _device.QueryInterface<IDXGIDevice>())
+                using (IDXGIAdapter adapter = dxgiDevice.GetAdapter())
+                {
+                    uint idx = 0;
+                    while (adapter.EnumOutputs(idx, out IDXGIOutput output).Success)
+                    {
+                        using (output)
+                        {
+                            using (IDXGIOutput6 output6 = output.QueryInterfaceOrNull<IDXGIOutput6>())
+                            {
+                                if (output6 != null && output6.Description1.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020)
+                                {
+                                    _displayHdrActive = true;
+                                    break;
+                                }
+                            }
+                        }
+                        idx++;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private bool TryInitializeDirectCompositionSwapChain(IntPtr hwnd)
+        {
+            try
+            {
                 using (IDXGIDevice dxgiDevice = _device.QueryInterface<IDXGIDevice>())
                 using (IDXGIAdapter adapter = dxgiDevice.GetAdapter())
                 using (IDXGIFactory2 factory = adapter.GetParent<IDXGIFactory2>())
@@ -547,79 +671,144 @@ float4 main(PSIn input) : SV_Target {
                     _dcompDevice.CreateTargetForHwnd(hwnd, true, out _dcompTarget).CheckError();
                     _dcompDevice.CreateVisual(out _dcompVisual).CheckError();
 
-                    var desc = new SwapChainDescription1
-                    {
-                        Width = (uint)_width,
-                        Height = (uint)_height,
-                        Format = Format.B8G8R8A8_UNorm,
-                        Stereo = false,
-                        SampleDescription = new SampleDescription(1, 0),
-                        BufferUsage = Usage.RenderTargetOutput,
-                        BufferCount = 2,
-                        Scaling = Scaling.Stretch,
-                        SwapEffect = SwapEffect.FlipDiscard,
-                        AlphaMode = AlphaMode.Ignore
-                    };
-
-                    _swapChain = factory.CreateSwapChainForComposition(_device, desc, null);
+                    _swapChain = CreateSwapChainWithHdrPreference(factory, useComposition: true, hwnd: hwnd);
                     _dcompVisual.SetContent(_swapChain).CheckError();
                     _dcompTarget.SetRoot(_dcompVisual).CheckError();
                     _dcompDevice.Commit().CheckError();
                     _usingDComp = true;
 
-                    AppLogger.Info(string.Format("DX11 DirectComposition initialized adapter='{0}'", adapter.Description.Description));
+                    AppLogger.Info(string.Format(
+                        "DX11 DirectComposition initialized adapter='{0}' hdr={1} (displayHdr={2}, mode={3})",
+                        adapter.Description.Description, _activeHdr, _displayHdrActive, _hdrMode
+                    ));
                     return true;
                 }
             }
             catch (Exception ex)
             {
                 AppLogger.Error("DirectComposition init failed, falling back to HWND SwapChain", ex);
-                CleanupSwapChainAndDevice();
+                if (_swapChain != null) { _swapChain.Dispose(); _swapChain = null; }
+                if (_dcompVisual != null) { _dcompVisual.Dispose(); _dcompVisual = null; }
+                if (_dcompTarget != null) { _dcompTarget.Dispose(); _dcompTarget = null; }
+                if (_dcompDevice != null) { _dcompDevice.Dispose(); _dcompDevice = null; }
+                _usingDComp = false;
                 return false;
             }
         }
 
-        private void InitializeHwndSwapChainFallback(IntPtr hwnd, FeatureLevel[] levels)
+        private void InitializeHwndSwapChainFallback(IntPtr hwnd)
         {
-            var swapDesc = new SwapChainDescription
+            using (IDXGIDevice dxgiDevice = _device.QueryInterface<IDXGIDevice>())
+            using (IDXGIAdapter adapter = dxgiDevice.GetAdapter())
+            using (IDXGIFactory2 factory = adapter.GetParent<IDXGIFactory2>())
             {
-                BufferCount = 1,
-                BufferDescription = new ModeDescription((uint)_width, (uint)_height, Format.B8G8R8A8_UNorm),
-                BufferUsage = Usage.RenderTargetOutput,
-                OutputWindow = hwnd,
-                SampleDescription = new SampleDescription(1, 0),
-                Windowed = true,
-                SwapEffect = SwapEffect.Discard,
-                Flags = SwapChainFlags.None
-            };
-
-            Result hr = D3D11.D3D11CreateDeviceAndSwapChain(
-                null,
-                DriverType.Hardware,
-                DeviceCreationFlags.BgraSupport,
-                levels,
-                swapDesc,
-                out _swapChain,
-                out _device,
-                out _,
-                out _context
-            );
-            if (hr.Failure)
-            {
-                D3D11.D3D11CreateDeviceAndSwapChain(
-                    null,
-                    DriverType.Warp,
-                    DeviceCreationFlags.BgraSupport,
-                    levels,
-                    swapDesc,
-                    out _swapChain,
-                    out _device,
-                    out _,
-                    out _context
-                ).CheckError();
+                _swapChain = CreateSwapChainWithHdrPreference(factory, useComposition: false, hwnd: hwnd);
             }
             _usingDComp = false;
-            AppLogger.Info("DX11 HWND Discard SwapChain fallback initialized");
+            AppLogger.Info(string.Format("DX11 HWND Discard SwapChain fallback initialized hdr={0}", _activeHdr));
+        }
+
+        private IDXGISwapChain CreateSwapChainWithHdrPreference(IDXGIFactory2 factory, bool useComposition, IntPtr hwnd)
+        {
+            bool wantHdr = ShouldUseHdr();
+            if (wantHdr)
+            {
+                try
+                {
+                    IDXGISwapChain1 hdrSwapChain = CreateSwapChainInternal(factory, useComposition, hwnd, Format.R16G16B16A16_Float);
+                    if (TryConfigureHdrColorSpace(hdrSwapChain))
+                    {
+                        _activeHdr = true;
+                        return hdrSwapChain;
+                    }
+                    hdrSwapChain.Dispose();
+                    AppLogger.Info("HDR scRGB color space not supported on this adapter/swapchain; falling back to SDR");
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Info("HDR swapchain creation fell back to SDR: " + ex.Message);
+                }
+            }
+
+            _activeHdr = false;
+            return CreateSwapChainInternal(factory, useComposition, hwnd, Format.B8G8R8A8_UNorm);
+        }
+
+        private IDXGISwapChain1 CreateSwapChainInternal(IDXGIFactory2 factory, bool useComposition, IntPtr hwnd, Format format)
+        {
+            if (useComposition)
+            {
+                var desc = new SwapChainDescription1
+                {
+                    Width = (uint)_width,
+                    Height = (uint)_height,
+                    Format = format,
+                    Stereo = false,
+                    SampleDescription = new SampleDescription(1, 0),
+                    BufferUsage = Usage.RenderTargetOutput,
+                    BufferCount = 2,
+                    Scaling = Scaling.Stretch,
+                    SwapEffect = SwapEffect.FlipDiscard,
+                    AlphaMode = AlphaMode.Ignore
+                };
+                return factory.CreateSwapChainForComposition(_device, desc, null);
+            }
+            else
+            {
+                var desc = new SwapChainDescription1
+                {
+                    Width = (uint)_width,
+                    Height = (uint)_height,
+                    Format = format,
+                    Stereo = false,
+                    SampleDescription = new SampleDescription(1, 0),
+                    BufferUsage = Usage.RenderTargetOutput,
+                    BufferCount = 1,
+                    Scaling = Scaling.Stretch,
+                    SwapEffect = SwapEffect.Discard,
+                    AlphaMode = AlphaMode.Ignore
+                };
+                return factory.CreateSwapChainForHwnd(_device, hwnd, desc);
+            }
+        }
+
+        private static bool TryConfigureHdrColorSpace(IDXGISwapChain swapChain)
+        {
+            using (IDXGISwapChain3 sc3 = swapChain.QueryInterfaceOrNull<IDXGISwapChain3>())
+            {
+                if (sc3 == null) return false;
+                SwapChainColorSpaceSupportFlags support = sc3.CheckColorSpaceSupport(ColorSpaceType.RgbFullG10NoneP709);
+                if ((support & SwapChainColorSpaceSupportFlags.Present) == 0)
+                {
+                    return false;
+                }
+                sc3.SetColorSpace1(ColorSpaceType.RgbFullG10NoneP709);
+                return true;
+            }
+        }
+
+        private void RecreateSwapChain()
+        {
+            if (_device == null) return;
+
+            _context.OMSetRenderTargets(Array.Empty<ID3D11RenderTargetView>());
+            if (_backBufferRtv != null) { _backBufferRtv.Dispose(); _backBufferRtv = null; }
+            if (_swapChain != null) { _swapChain.Dispose(); _swapChain = null; }
+
+            using (IDXGIDevice dxgiDevice = _device.QueryInterface<IDXGIDevice>())
+            using (IDXGIAdapter adapter = dxgiDevice.GetAdapter())
+            using (IDXGIFactory2 factory = adapter.GetParent<IDXGIFactory2>())
+            {
+                _swapChain = CreateSwapChainWithHdrPreference(factory, _usingDComp, _hwnd);
+                if (_usingDComp && _dcompVisual != null && _dcompDevice != null)
+                {
+                    _dcompVisual.SetContent(_swapChain).CheckError();
+                    _dcompDevice.Commit().CheckError();
+                }
+            }
+
+            CreateBackBufferRtv();
+            AppLogger.Info(string.Format("DX11 SwapChain switched hdr={0} (displayHdr={1}, mode={2})", _activeHdr, _displayHdrActive, _hdrMode));
         }
 
         private void CleanupSwapChainAndDevice()

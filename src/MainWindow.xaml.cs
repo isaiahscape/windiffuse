@@ -85,11 +85,14 @@ namespace DiffuseWindows
         {
             EffectCombo.SelectionChanged += OnSettingControlChanged;
             PaletteCombo.SelectionChanged += OnSettingControlChanged;
+            HdrModeCombo.SelectionChanged += OnSettingControlChanged;
 
             ScaleSlider.ValueChanged += OnSliderValueChanged;
             SpeedMinSlider.ValueChanged += OnSliderValueChanged;
             SpeedMaxSlider.ValueChanged += OnSliderValueChanged;
             BrightnessSlider.ValueChanged += OnSliderValueChanged;
+            SaturationSlider.ValueChanged += OnSliderValueChanged;
+            HdrIntensitySlider.ValueChanged += OnSliderValueChanged;
             OpacitySlider.ValueChanged += OnSliderValueChanged;
             BeatStrengthSlider.ValueChanged += OnSliderValueChanged;
 
@@ -429,7 +432,13 @@ namespace DiffuseWindows
                 SpeedMinSlider.Value = _settings.SpeedMin;
                 SpeedMaxSlider.Value = _settings.SpeedMax;
                 BrightnessSlider.Value = _settings.BrightnessOffset;
+                SaturationSlider.Value = _settings.Saturation;
                 OpacitySlider.Value = _settings.WallpaperOpacity;
+                SelectComboByTag(HdrModeCombo, _settings.HdrMode, 0);
+                HdrIntensitySlider.Value = _settings.HdrIntensity;
+                bool hdrCustomizable = _settings.HdrMode != "off";
+                HdrIntensityPanel.Opacity = hdrCustomizable ? 1.0 : 0.45;
+                HdrIntensitySlider.IsEnabled = hdrCustomizable;
 
                 LiveBeatsToggle.IsOn = _settings.EnableLiveBeats;
                 BeatStrengthSlider.Value = _settings.BeatStrength;
@@ -464,7 +473,9 @@ namespace DiffuseWindows
             SpeedMinValueText.Text = string.Format("{0:0.00}", SpeedMinSlider.Value);
             SpeedMaxValueText.Text = string.Format("{0:0.00}", SpeedMaxSlider.Value);
             BrightnessValueText.Text = string.Format("{0:+0.00;-0.00;0.00}", BrightnessSlider.Value);
+            SaturationValueText.Text = string.Format("{0:0.00}x", SaturationSlider.Value);
             OpacityValueText.Text = string.Format("{0}%", (int)Math.Round(OpacitySlider.Value * 100.0 / 255.0));
+            HdrIntensityValueText.Text = string.Format("{0:0.00}x", HdrIntensitySlider.Value);
             BeatStrengthValueText.Text = string.Format("{0:0.00}", BeatStrengthSlider.Value);
         }
 
@@ -478,7 +489,15 @@ namespace DiffuseWindows
             _settings.SpeedMin = (float)SpeedMinSlider.Value;
             _settings.SpeedMax = Math.Max(_settings.SpeedMin, (float)SpeedMaxSlider.Value);
             _settings.BrightnessOffset = (float)BrightnessSlider.Value;
+            _settings.Saturation = (float)SaturationSlider.Value;
             _settings.WallpaperOpacity = (int)Math.Round(OpacitySlider.Value);
+
+            var hdrItem = HdrModeCombo.SelectedItem as ComboBoxItem;
+            _settings.HdrMode = hdrItem != null && hdrItem.Tag != null ? hdrItem.Tag.ToString() : "auto";
+            _settings.HdrIntensity = (float)HdrIntensitySlider.Value;
+            bool hdrCustomizable = _settings.HdrMode != "off";
+            HdrIntensityPanel.Opacity = hdrCustomizable ? 1.0 : 0.45;
+            HdrIntensitySlider.IsEnabled = hdrCustomizable;
 
             _settings.EnableLiveBeats = LiveBeatsToggle.IsOn;
             _settings.BeatStrength = (float)BeatStrengthSlider.Value;
