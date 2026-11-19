@@ -68,3 +68,8 @@ Options:
 - `.\run.ps1 -Preview` — Run in a preview window instead of attaching behind desktop icons.
 
 Settings and logs are stored in `%AppData%\DiffuseWindows\`.
+
+## Credits
+
+- **[JustZht](https://github.com/JustinFincher)** (**Depthware** / **[FinGameWorks](https://github.com/FinGameWorks)**) — Creator of the original **Diffuse** Android live wallpaper, fluid shader design, and palettes.
+- **[rocksdanister](https://github.com/rocksdanister)** (**[Lively Wallpaper](https://github.com/lively-community/lively)**) — Windows live wallpaper reference for `Progman` / `WorkerW` desktop parenting and Windows 11 raised-desktop techniques.
