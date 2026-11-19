@@ -28,17 +28,25 @@
 ## Features
 
 - **WinUI 3 Floating Tray Flyout:**
-  - Floats in the system tray with smooth Windows 11 open/close slide-and-fade animations and `DesktopAcrylicBackdrop`.
-  - Left-click the tray icon to toggle controls; right-click for quick actions (`Open Controls`, `Re-attach to Desktop`, `Pause / Resume Wallpaper`, `Quit Diffuse`).
-- **Desktop Layering (`Lively`-style):**
-  - Supports **Windows 11 24H2 / 25H2 / 26H2** raised-desktop `Progman` parenting (`WS_EX_LAYERED` child placed behind `SHELLDLL_DefView` and above `WorkerW`) plus classic `WorkerW` fallback.
-  - Configurable **Wallpaper Opacity** (`10%–100%`), **Span all monitors**, **Pause on fullscreen app**, and **Start with Windows** (`HKCU\...\Run` + `StartupApproved` sync).
+  - Floats in the system tray with smooth Windows 11 open/close slide-and-fade animations and  Desktop Acrylic Backdrop .
+  - Left-click the tray icon to toggle controls; right-click for quick actions.
+- **Desktop Layering:**
+  - Supports **Windows 11 24H2 / 25H2 / 26H2** raised-desktop parenting plus classic fallback.
+  - Configurable **Wallpaper Opacity**, **Span all monitors**, **Pause on fullscreen app**, and **Start with Windows**.
 - **Direct3D 11 & DirectComposition Pipeline:**
-  - Ports Diffuse's multi-pass shader pipeline (`color`, `kawaseBlur`, `fade`, `noise`, `flutedGlass`) and `rand.png` LUT to HLSL with `R16G16B16A16_Float` render targets, `FlipDiscard` DirectComposition (`CreateSwapChainForComposition`), and configurable **FPS limit (`10–240`) / VSync**.
+  - Ports Diffuse's multi-pass shader pipeline, and configurable **FPS limit / VSync**.
 - **Windows Now Playing (SMTC) & Live Beats (WASAPI):**
   - Reads album art and playback state from Cider, Spotify, Apple Music, YouTube Music, VLC, etc., with optional 4-band WASAPI loopback FFT beat reactivity.
-- **WinUI 3 Single-File Installer (`DiffuseSetup-<hash>-win-x64.exe`):**
-  - Per-user self-contained installer (`MicaBackdrop`), automatic post-install launch, automatic Windows startup registration, Start Menu shortcuts, and Settings > Installed Apps uninstall support.
+
+### Screenshots
+
+<p align="center">
+  <img src="assets/ss-3.png" alt="Diffuse for Windows WinUI 3 tray flyout and Fluted Glass wallpaper" width="100%" />
+</p>
+
+| Blur | Fluted Glass |
+| :---: | :---: |
+| <img src="assets/ss-1.png" alt="Diffuse Blur wallpaper reacting to Now Playing album art" width="100%" /> | <img src="assets/ss-2.png" alt="Diffuse Fluted Glass wallpaper reacting to Now Playing album art" width="100%" /> |
 
 ## Install / Build & Run
 
