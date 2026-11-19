@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  Live Wallpaper that shows what you are playing in a fluid-motion manner. A Native Windows 11 port of <strong>Diffuse for Android</strong> featuring a <strong>WinUI 3</strong> floating system-tray flyout + installer.
+  Live Wallpaper that shows what you are playing in a fluid-motion manner. A Native Windows 11 port of <a href="https://github.com/isaiahscape/diffuse"><strong>Diffuse for Android</strong></a> featuring a <strong>WinUI 3</strong> floating system-tray flyout + installer.
 </p>
 
 ---
