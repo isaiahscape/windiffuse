@@ -86,6 +86,7 @@ namespace DiffuseWindows
             EffectCombo.SelectionChanged += OnSettingControlChanged;
             PaletteCombo.SelectionChanged += OnSettingControlChanged;
             HdrModeCombo.SelectionChanged += OnSettingControlChanged;
+            BpmSourceCombo.SelectionChanged += OnSettingControlChanged;
 
             ScaleSlider.ValueChanged += OnSliderValueChanged;
             SpeedMinSlider.ValueChanged += OnSliderValueChanged;
@@ -442,8 +443,10 @@ namespace DiffuseWindows
 
                 LiveBeatsToggle.IsOn = _settings.EnableLiveBeats;
                 BeatStrengthSlider.Value = _settings.BeatStrength;
+                SelectComboByTag(BpmSourceCombo, _settings.BpmSource, 0);
                 BeatStrengthPanel.Opacity = _settings.EnableLiveBeats ? 1.0 : 0.45;
                 BeatStrengthSlider.IsEnabled = _settings.EnableLiveBeats;
+                BpmSourceCombo.IsEnabled = _settings.EnableLiveBeats;
 
                 SelectComboByTag(PaletteCombo, _settings.DefaultPaletteId, 0);
                 PreservePauseToggle.IsOn = _settings.PreserveAfterPause;
@@ -501,8 +504,11 @@ namespace DiffuseWindows
 
             _settings.EnableLiveBeats = LiveBeatsToggle.IsOn;
             _settings.BeatStrength = (float)BeatStrengthSlider.Value;
+            var bpmItem = BpmSourceCombo.SelectedItem as ComboBoxItem;
+            _settings.BpmSource = bpmItem != null && bpmItem.Tag != null ? bpmItem.Tag.ToString() : "auto";
             BeatStrengthPanel.Opacity = _settings.EnableLiveBeats ? 1.0 : 0.45;
             BeatStrengthSlider.IsEnabled = _settings.EnableLiveBeats;
+            BpmSourceCombo.IsEnabled = _settings.EnableLiveBeats;
 
             var palItem = PaletteCombo.SelectedItem as ComboBoxItem;
             if (palItem != null && palItem.Tag != null)
@@ -651,13 +657,20 @@ namespace DiffuseWindows
             DesktopStatusText.Text = string.IsNullOrEmpty(mode) ? "Desktop" : mode;
         }
 
-        public void UpdateLiveBeatsBpm(int roundedBpm)
+        public void UpdateLiveBeatsBpm(int roundedBpm, string sourceLabel = null)
         {
             DispatcherQueue.TryEnqueue(delegate
             {
-                LiveBeatsStatusText.Text = (_settings.EnableLiveBeats && roundedBpm > 0)
-                    ? string.Format("React to system audio FFT · {0} BPM", roundedBpm)
-                    : "React to system audio FFT";
+                if (_settings.EnableLiveBeats && roundedBpm > 0)
+                {
+                    LiveBeatsStatusText.Text = string.IsNullOrEmpty(sourceLabel)
+                        ? string.Format("React to system audio FFT · {0} BPM", roundedBpm)
+                        : string.Format("React to system audio FFT · {0} BPM ({1})", roundedBpm, sourceLabel);
+                }
+                else
+                {
+                    LiveBeatsStatusText.Text = "React to system audio FFT";
+                }
             });
         }
 

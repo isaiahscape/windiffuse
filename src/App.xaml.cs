@@ -21,6 +21,7 @@ namespace DiffuseWindows
         private TrayIconHost _trayIcon;
         private MediaSessionWatcher _mediaWatcher;
         private WasapiAudioMonitor _audioMonitor;
+        private readonly OnlineBpmService _onlineBpmService = new OnlineBpmService();
 
         private MediaStateSnapshot _lastMedia;
         private Bitmap _currentAlbumArt;
@@ -30,6 +31,15 @@ namespace DiffuseWindows
         private bool _isRebuildingHosts;
         private Timer _displayChangeDebounce;
         private string _lastMonitorSignature = "";
+
+        private float _audioBpm;
+        private float _audioBpmConf;
+        private float _onlineBpm;
+        private string _onlineBpmSource = "";
+        private string _onlineTrackKey = "";
+        private CancellationTokenSource _onlineLookupCts;
+        private int _lastUiBpm;
+        private string _lastUiBpmSource = "";
 
         public App()
         {
@@ -183,7 +193,7 @@ namespace DiffuseWindows
             _mediaWatcher.Start();
 
             _audioMonitor = new WasapiAudioMonitor(OnAudioBands, OnBpmDetected);
-            _audioMonitor.SetEnabled(_settings.EnableLiveBeats);
+            _audioMonitor.SetEnabled(_settings.EnableLiveBeats && _settings.BpmSource != "online");
 
             RecomputeEffectiveTexture();
 
@@ -333,13 +343,36 @@ namespace DiffuseWindows
                 _settings.PreserveAfterPause != updated.PreserveAfterPause ||
                 _settings.BrightnessOffset != updated.BrightnessOffset;
 
+            string prevSource = _settings.BpmSource;
+            bool wasLiveBeats = _settings.EnableLiveBeats;
             _settings = updated;
-            _audioMonitor.SetEnabled(_settings.EnableLiveBeats);
-            if (!_settings.EnableLiveBeats && _lastUiBpm != 0)
+            bool useWasapi = _settings.EnableLiveBeats && _settings.BpmSource != "online";
+            _audioMonitor.SetEnabled(useWasapi);
+            if (!useWasapi)
             {
-                _lastUiBpm = 0;
-                _mainWindow?.UpdateLiveBeatsBpm(0);
+                _audioBpm = 0f;
+                _audioBpmConf = 0f;
+                for (int i = 0; i < _hosts.Count; i++)
+                {
+                    _hosts[i].QueueAudioBands(new double[4]);
+                }
             }
+            if (!_settings.EnableLiveBeats)
+            {
+                CancelOnlineBpmLookup(clearValue: true);
+            }
+            else if (!wasLiveBeats || prevSource != _settings.BpmSource)
+            {
+                if (_settings.BpmSource == "audio")
+                {
+                    CancelOnlineBpmLookup(clearValue: true);
+                }
+                else
+                {
+                    TriggerOnlineBpmLookup(_lastMedia);
+                }
+            }
+            ResolveAndPublishBpm();
 
             if (rebuildNeeded)
             {
@@ -390,6 +423,11 @@ namespace DiffuseWindows
                 _hosts[i].QueuePlaybackState(snap.IsPlaying);
             }
 
+            if (_settings.EnableLiveBeats && _settings.BpmSource != "audio")
+            {
+                TriggerOnlineBpmLookup(snap);
+            }
+
             RecomputeEffectiveTexture();
         }
 
@@ -430,11 +468,9 @@ namespace DiffuseWindows
             _mainWindow.UpdateMediaStatus(_lastMedia, _effectiveTexture);
         }
 
-        private int _lastUiBpm;
-
         private void OnAudioBands(double[] bands)
         {
-            if (IsShuttingDown || !_settings.EnableLiveBeats) return;
+            if (IsShuttingDown || !_settings.EnableLiveBeats || _settings.BpmSource == "online") return;
             for (int i = 0; i < _hosts.Count; i++)
             {
                 _hosts[i].QueueAudioBands(bands);
@@ -444,15 +480,128 @@ namespace DiffuseWindows
         private void OnBpmDetected(float bpm, float confidence)
         {
             if (IsShuttingDown || !_settings.EnableLiveBeats) return;
+            _audioBpm = bpm;
+            _audioBpmConf = confidence;
+            ResolveAndPublishBpm();
+        }
+
+        private void CancelOnlineBpmLookup(bool clearValue)
+        {
+            if (_onlineLookupCts != null)
+            {
+                try { _onlineLookupCts.Cancel(); _onlineLookupCts.Dispose(); } catch { }
+                _onlineLookupCts = null;
+            }
+            if (clearValue)
+            {
+                _onlineTrackKey = "";
+                _onlineBpm = 0f;
+                _onlineBpmSource = "";
+            }
+        }
+
+        private async void TriggerOnlineBpmLookup(MediaStateSnapshot snap)
+        {
+            if (IsShuttingDown || snap == null || !snap.HasSession || !snap.IsPlaying || string.IsNullOrWhiteSpace(snap.Title))
+            {
+                CancelOnlineBpmLookup(clearValue: true);
+                ResolveAndPublishBpm();
+                return;
+            }
+
+            string trackKey = (snap.Artist ?? "") + "|" + snap.Title + "|" + (snap.SourceApp ?? "");
+            if (trackKey == _onlineTrackKey && _onlineBpm > 20f)
+            {
+                ResolveAndPublishBpm();
+                return;
+            }
+
+            CancelOnlineBpmLookup(clearValue: true);
+            _onlineTrackKey = trackKey;
+            var cts = new CancellationTokenSource();
+            _onlineLookupCts = cts;
+
+            try
+            {
+                var res = await _onlineBpmService.LookupAsync(snap.Title, snap.Artist, snap.SourceApp, cts.Token);
+                if (IsShuttingDown || cts.IsCancellationRequested || _onlineTrackKey != trackKey) return;
+
+                if (res != null && res.Bpm > 20f)
+                {
+                    _onlineBpm = res.Bpm;
+                    _onlineBpmSource = res.Source;
+                }
+                else
+                {
+                    _onlineBpm = 0f;
+                    _onlineBpmSource = "";
+                }
+                ResolveAndPublishBpm();
+            }
+            catch { }
+        }
+
+        private void ResolveAndPublishBpm()
+        {
+            if (IsShuttingDown) return;
+
+            float bpmToApply = 0f;
+            float confToApply = 0f;
+            string sourceLabel = "";
+
+            if (_settings.EnableLiveBeats)
+            {
+                string mode = _settings.BpmSource ?? "auto";
+                if (mode == "audio")
+                {
+                    bpmToApply = _audioBpm;
+                    confToApply = _audioBpmConf;
+                    sourceLabel = "Audio";
+                }
+                else if (mode == "online")
+                {
+                    if (_onlineBpm > 20f)
+                    {
+                        bpmToApply = _onlineBpm;
+                        confToApply = 0.90f;
+                        sourceLabel = _onlineBpmSource;
+                    }
+                }
+                else
+                {
+                    if (_audioBpmConf >= 0.40f && _audioBpm > 20f)
+                    {
+                        bpmToApply = _audioBpm;
+                        confToApply = _audioBpmConf;
+                        sourceLabel = "Audio";
+                    }
+                    else if (_onlineBpm > 20f)
+                    {
+                        bpmToApply = _onlineBpm;
+                        confToApply = 0.85f;
+                        sourceLabel = _onlineBpmSource;
+                    }
+                    else
+                    {
+                        bpmToApply = _audioBpm;
+                        confToApply = _audioBpmConf;
+                        sourceLabel = "Audio";
+                    }
+                }
+            }
+
             for (int i = 0; i < _hosts.Count; i++)
             {
-                _hosts[i].QueueBpm(bpm, confidence);
+                _hosts[i].QueueBpm(bpmToApply, confToApply);
             }
-            int rounded = (bpm > 20f && confidence >= 0.25f) ? (int)Math.Round(bpm) : 0;
-            if (rounded != _lastUiBpm)
+
+            int rounded = (bpmToApply > 20f && confToApply >= 0.25f) ? (int)Math.Round(bpmToApply) : 0;
+            string shownSource = rounded > 0 ? sourceLabel : "";
+            if (rounded != _lastUiBpm || shownSource != _lastUiBpmSource)
             {
                 _lastUiBpm = rounded;
-                _mainWindow?.UpdateLiveBeatsBpm(rounded);
+                _lastUiBpmSource = shownSource;
+                _mainWindow?.UpdateLiveBeatsBpm(rounded, shownSource);
             }
         }
 
@@ -477,6 +626,7 @@ namespace DiffuseWindows
             IsShuttingDown = true;
 
             try { _displayChangeDebounce?.Dispose(); } catch { }
+            try { CancelOnlineBpmLookup(clearValue: false); _onlineBpmService.Dispose(); } catch { }
             try { _mediaWatcher?.Dispose(); } catch { }
             try { _audioMonitor?.Dispose(); } catch { }
             try { _trayIcon?.Dispose(); } catch { }

@@ -262,6 +262,18 @@
                                 <TextBlock x:Name="BeatStrengthValueText" Text="0.50" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </Grid>
                             <Slider x:Name="BeatStrengthSlider" Minimum="0.00" Maximum="2.00" StepFrequency="0.05" SnapsTo="StepValues" />
+                            <Grid ColumnSpacing="8" Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="BPM source" FontSize="12.5" VerticalAlignment="Center" />
+                                <ComboBox x:Name="BpmSourceCombo" Grid.Column="1" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="Auto (Audio + Online)" Tag="auto" />
+                                    <ComboBoxItem Content="Audio FFT Only" Tag="audio" />
+                                    <ComboBoxItem Content="Online (Apple Music / Cider)" Tag="online" />
+                                </ComboBox>
+                            </Grid>
                         </StackPanel>
 
                         <Grid ColumnSpacing="6">

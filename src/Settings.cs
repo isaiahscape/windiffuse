@@ -20,6 +20,7 @@ namespace DiffuseWindows
         [DataMember] public float HdrIntensity = 1.6f;
         [DataMember] public bool EnableLiveBeats = false;
         [DataMember] public float BeatStrength = 0.5f;
+        [DataMember] public string BpmSource = "auto";
         [DataMember] public bool PerformanceMode = false;
         [DataMember] public bool PreserveAfterPause = false;
         [DataMember] public string DefaultPaletteId = "monochrome";
@@ -62,6 +63,10 @@ namespace DiffuseWindows
             if (HdrMode != "auto" && HdrMode != "on" && HdrMode != "off")
             {
                 HdrMode = "auto";
+            }
+            if (BpmSource != "auto" && BpmSource != "audio" && BpmSource != "online")
+            {
+                BpmSource = "auto";
             }
             NoiseScale = ClampFloat(NoiseScale, 0.05f, 2.5f);
             SpeedMin = ClampFloat(SpeedMin, 0.0f, 2.0f);

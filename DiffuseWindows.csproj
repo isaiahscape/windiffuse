@@ -44,6 +44,7 @@
     <Compile Include="src\DesktopWallpaperHost.cs" />
     <Compile Include="src\D3D11DiffuseRenderer.cs" />
     <Compile Include="src\MediaSessionWatcher.cs" />
+    <Compile Include="src\OnlineBpmService.cs" />
     <Compile Include="src\Settings.cs" />
     <Compile Include="src\StartupManager.cs" />
     <Compile Include="src\TrayIconHost.cs" />
