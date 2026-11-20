@@ -664,12 +664,12 @@ namespace DiffuseWindows
                 if (_settings.EnableLiveBeats && roundedBpm > 0)
                 {
                     LiveBeatsStatusText.Text = string.IsNullOrEmpty(sourceLabel)
-                        ? string.Format("React to system audio FFT · {0} BPM", roundedBpm)
-                        : string.Format("React to system audio FFT · {0} BPM ({1})", roundedBpm, sourceLabel);
+                        ? string.Format("Pulse synced · {0} BPM", roundedBpm)
+                        : string.Format("Pulse synced · {0} BPM ({1})", roundedBpm, sourceLabel);
                 }
                 else
                 {
-                    LiveBeatsStatusText.Text = "React to system audio FFT";
+                    LiveBeatsStatusText.Text = "Pulse synced to song BPM";
                 }
             });
         }

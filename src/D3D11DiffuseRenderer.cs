@@ -304,8 +304,6 @@ float4 main(PSIn input) : SV_Target {
         private bool _performanceMode;
 
         private float _beatStrength = 1.0f;
-        private float _beatLerpAlpha = 0.08f;
-        private float _targetBeat;
         private float _currentBeat;
         private float _bpm;
         private float _bpmConfidence;
@@ -406,10 +404,8 @@ float4 main(PSIn input) : SV_Target {
             _postProcessingMode = settings.PostProcessingMode;
             _performanceMode = settings.PerformanceMode;
             _beatStrength = settings.BeatStrength;
-            _beatLerpAlpha = 0.06f * settings.BeatStrength + 0.04f;
             if (!settings.EnableLiveBeats)
             {
-                _targetBeat = 0.0f;
                 _bpm = 0.0f;
                 _bpmConfidence = 0.0f;
                 _beatPhase = 0.0f;
@@ -433,13 +429,7 @@ float4 main(PSIn input) : SV_Target {
 
         public void SetAudioBands(double[] bands)
         {
-            if (bands == null || bands.Length < 4) return;
-            _targetBeat = (
-                ((float)bands[0] * 1.5f) -
-                ((float)bands[1] * 0.1f) -
-                ((float)bands[2] * 0.2f) -
-                ((float)bands[3] * 0.3f)
-            ) * _beatStrength;
+            // Keep interface for callers; Live Beats now pulses strictly from detected BPM.
         }
 
         public void SetBpm(float bpm, float confidence)
@@ -450,7 +440,6 @@ float4 main(PSIn input) : SV_Target {
 
         public void ResetAudioBeat()
         {
-            _targetBeat = 0.0f;
             _bpm = 0.0f;
             _bpmConfidence = 0.0f;
             _beatPhase = 0.0f;
@@ -507,22 +496,26 @@ float4 main(PSIn input) : SV_Target {
 
         public void Render(float deltaSeconds, bool useVsync)
         {
-            float effectiveTargetBeat = _targetBeat;
+            float targetPulseBeat = 0.0f;
             float speedBonus = 0.0f;
-            if (_bpm > 20.0f && _bpmConfidence > 0.25f && _beatStrength > 0.001f)
+            if (_bpm > 20.0f && _bpmConfidence >= 0.25f && _beatStrength > 0.001f)
             {
                 _beatPhase = (_beatPhase + deltaSeconds * (_bpm / 60.0f)) % 1.0f;
-                float beatPulse = (float)Math.Exp(-_beatPhase * 4.5);
-                float weight = _bpmConfidence * 0.45f;
-                effectiveTargetBeat = Lerp(_targetBeat, Math.Max(_targetBeat, beatPulse * _beatStrength * 1.15f), weight);
-                speedBonus = beatPulse * _bpmConfidence * _beatStrength * 0.22f;
+                const float attackFrac = 0.06f;
+                float envelope = _beatPhase < attackFrac
+                    ? (_beatPhase / attackFrac)
+                    : (float)Math.Exp(-(_beatPhase - attackFrac) * 5.2);
+                // Crisp square-rooted punch shape so every beat pops strongly and relaxes cleanly.
+                float pulse = (float)Math.Sqrt(Math.Max(0.0f, envelope));
+                targetPulseBeat = pulse * _beatStrength * 1.65f;
+                speedBonus = pulse * _beatStrength * 0.45f;
             }
 
             _scaledTime = (_scaledTime + (double)(deltaSeconds * _currentSpeed)) % TimeWrap;
-            float speedAlpha = 1.0f - (float)Math.Pow(1.0 - 0.01, deltaSeconds * 60.0f);
-            float beatAlpha = 1.0f - (float)Math.Pow(1.0 - _beatLerpAlpha, deltaSeconds * 60.0f);
+            float speedAlpha = 1.0f - (float)Math.Pow(1.0 - 0.025, deltaSeconds * 60.0f);
+            float beatAlpha = Math.Min(1.0f, Math.Max(0.18f, 1.0f - (float)Math.Pow(1.0 - 0.38, deltaSeconds * 60.0f)));
             _currentSpeed = Lerp(_currentSpeed, _targetSpeed + speedBonus, speedAlpha);
-            _currentBeat = Lerp(_currentBeat, effectiveTargetBeat, beatAlpha);
+            _currentBeat = Lerp(_currentBeat, targetPulseBeat, beatAlpha);
 
             // Pass 1: Copy fboA -> fboC, then crossfade fboC -> fboA toward fboB
             DrawPass(_fboC.Rtv, AlbumFboSize, AlbumFboSize, _colorPs, _fboA.Srv, null, null, _samplerClamp, _samplerWrap, new ShaderParams());
