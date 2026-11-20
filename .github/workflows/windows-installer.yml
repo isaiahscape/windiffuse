@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Optional package label (defaults to latest short commit hash)'
+        description: 'Optional package label (defaults to <Version> from DiffuseWindows.csproj)'
         required: false
         default: ''
 
@@ -37,10 +37,14 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          $sha7 = (git rev-parse --short=7 HEAD).Trim()
-          $ver = "${{ github.event.inputs.version }}"
+          $ver = "${{ github.event.inputs.version }}".Trim()
           if ([string]::IsNullOrWhiteSpace($ver)) {
-            $ver = $sha7
+            [xml]$projXml = Get-Content -LiteralPath "DiffuseWindows.csproj"
+            $projVer = ($projXml.Project.PropertyGroup.Version | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+            if ([string]::IsNullOrWhiteSpace($projVer)) {
+              throw "Could not extract <Version> from DiffuseWindows.csproj"
+            }
+            $ver = $projVer.Trim().TrimStart('v', 'V')
           }
           "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 

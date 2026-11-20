@@ -50,7 +50,7 @@
 
 ## Install / Build & Run
 
-Download the latest `DiffuseSetup-<hash>-win-x64.exe` or portable `.zip` from [Releases](https://github.com/isaiahscape/windiffuse/releases), or build locally:
+Download the latest `DiffuseSetup-<version>-win-x64.exe` or portable `.zip` from [Releases](https://github.com/isaiahscape/windiffuse/releases), or build locally:
 
 ```powershell
 .\build.ps1

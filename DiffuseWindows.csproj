@@ -5,6 +5,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>DiffuseWindows</RootNamespace>
     <AssemblyName>DiffuseWindows</AssemblyName>
+    <Version>1.3.0</Version>
     <ApplicationIcon>assets\diffuse.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>

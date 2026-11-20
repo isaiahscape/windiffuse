@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Optional release tag (defaults to build-<commit-hash>)'
+        description: 'Optional release tag (defaults to v<Version> from DiffuseWindows.csproj)'
         required: false
         default: ''
       prerelease:
@@ -39,20 +39,28 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Resolve commit hash & release metadata
+      - name: Resolve version & release metadata
         id: meta
         shell: pwsh
         run: |
-          $sha7 = (git rev-parse --short=7 HEAD).Trim()
-          $pkgVer = $sha7
+          [xml]$projXml = Get-Content -LiteralPath "DiffuseWindows.csproj"
+          $projVer = ($projXml.Project.PropertyGroup.Version | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+          if ([string]::IsNullOrWhiteSpace($projVer)) {
+            throw "Could not extract <Version> from DiffuseWindows.csproj"
+          }
+          $projVer = $projVer.Trim().TrimStart('v', 'V')
+
           if ("${{ github.ref_type }}" -eq "tag") {
             $releaseTag = "${{ github.ref_name }}"
+            $pkgVer = $releaseTag.TrimStart('v', 'V')
             $isPrerelease = "false"
           } else {
             $customTag = "${{ inputs.tag }}".Trim()
-            $releaseTag = if ([string]::IsNullOrWhiteSpace($customTag)) { "build-$sha7" } else { $customTag }
+            $releaseTag = if ([string]::IsNullOrWhiteSpace($customTag)) { "v$projVer" } else { $customTag }
+            $pkgVer = $projVer
             $isPrerelease = if ("${{ inputs.prerelease }}" -eq "true") { "true" } else { "false" }
           }
+
           "version=$pkgVer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=$releaseTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "prerelease=$isPrerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

@@ -30,7 +30,13 @@ if ($gitCmd) {
 }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = if ($commitHash) { $commitHash } else { "dev" }
+    [xml]$projXml = Get-Content -LiteralPath $csproj
+    $projVer = ($projXml.Project.PropertyGroup.Version | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+    if (-not [string]::IsNullOrWhiteSpace($projVer)) {
+        $Version = $projVer.Trim()
+    } else {
+        $Version = if ($commitHash) { $commitHash } else { "dev" }
+    }
 }
 
 $packageLabel = $Version.Trim() -replace '[^0-9A-Za-z._-]', '-'
