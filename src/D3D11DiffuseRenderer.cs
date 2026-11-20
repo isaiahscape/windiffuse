@@ -307,6 +307,9 @@ float4 main(PSIn input) : SV_Target {
         private float _beatLerpAlpha = 0.08f;
         private float _targetBeat;
         private float _currentBeat;
+        private float _bpm;
+        private float _bpmConfidence;
+        private float _beatPhase;
 
         private double _scaledTime;
         private bool _hasInitialTexture;
@@ -407,6 +410,9 @@ float4 main(PSIn input) : SV_Target {
             if (!settings.EnableLiveBeats)
             {
                 _targetBeat = 0.0f;
+                _bpm = 0.0f;
+                _bpmConfidence = 0.0f;
+                _beatPhase = 0.0f;
             }
 
             if (hdrModeChanged && _device != null && _hwnd != IntPtr.Zero)
@@ -436,9 +442,18 @@ float4 main(PSIn input) : SV_Target {
             ) * _beatStrength;
         }
 
+        public void SetBpm(float bpm, float confidence)
+        {
+            _bpm = bpm;
+            _bpmConfidence = confidence;
+        }
+
         public void ResetAudioBeat()
         {
             _targetBeat = 0.0f;
+            _bpm = 0.0f;
+            _bpmConfidence = 0.0f;
+            _beatPhase = 0.0f;
         }
 
         public void SetAlbumBitmap(Bitmap sourceBitmap)
@@ -492,11 +507,22 @@ float4 main(PSIn input) : SV_Target {
 
         public void Render(float deltaSeconds, bool useVsync)
         {
+            float effectiveTargetBeat = _targetBeat;
+            float speedBonus = 0.0f;
+            if (_bpm > 20.0f && _bpmConfidence > 0.25f && _beatStrength > 0.001f)
+            {
+                _beatPhase = (_beatPhase + deltaSeconds * (_bpm / 60.0f)) % 1.0f;
+                float beatPulse = (float)Math.Exp(-_beatPhase * 4.5);
+                float weight = _bpmConfidence * 0.45f;
+                effectiveTargetBeat = Lerp(_targetBeat, Math.Max(_targetBeat, beatPulse * _beatStrength * 1.15f), weight);
+                speedBonus = beatPulse * _bpmConfidence * _beatStrength * 0.22f;
+            }
+
             _scaledTime = (_scaledTime + (double)(deltaSeconds * _currentSpeed)) % TimeWrap;
             float speedAlpha = 1.0f - (float)Math.Pow(1.0 - 0.01, deltaSeconds * 60.0f);
             float beatAlpha = 1.0f - (float)Math.Pow(1.0 - _beatLerpAlpha, deltaSeconds * 60.0f);
-            _currentSpeed = Lerp(_currentSpeed, _targetSpeed, speedAlpha);
-            _currentBeat = Lerp(_currentBeat, _targetBeat, beatAlpha);
+            _currentSpeed = Lerp(_currentSpeed, _targetSpeed + speedBonus, speedAlpha);
+            _currentBeat = Lerp(_currentBeat, effectiveTargetBeat, beatAlpha);
 
             // Pass 1: Copy fboA -> fboC, then crossfade fboC -> fboA toward fboB
             DrawPass(_fboC.Rtv, AlbumFboSize, AlbumFboSize, _colorPs, _fboA.Srv, null, null, _samplerClamp, _samplerWrap, new ShaderParams());

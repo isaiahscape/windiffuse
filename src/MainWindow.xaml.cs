@@ -651,6 +651,16 @@ namespace DiffuseWindows
             DesktopStatusText.Text = string.IsNullOrEmpty(mode) ? "Desktop" : mode;
         }
 
+        public void UpdateLiveBeatsBpm(int roundedBpm)
+        {
+            DispatcherQueue.TryEnqueue(delegate
+            {
+                LiveBeatsStatusText.Text = (_settings.EnableLiveBeats && roundedBpm > 0)
+                    ? string.Format("React to system audio FFT · {0} BPM", roundedBpm)
+                    : "React to system audio FFT";
+            });
+        }
+
         public async void UpdateMediaStatus(MediaStateSnapshot snap, Bitmap activeDisplayBitmap)
         {
             if (snap != null && snap.HasSession)

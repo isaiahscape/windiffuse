@@ -182,7 +182,7 @@ namespace DiffuseWindows
             _mediaWatcher = new MediaSessionWatcher(DispatcherQueue.GetForCurrentThread(), OnMediaChanged);
             _mediaWatcher.Start();
 
-            _audioMonitor = new WasapiAudioMonitor(OnAudioBands);
+            _audioMonitor = new WasapiAudioMonitor(OnAudioBands, OnBpmDetected);
             _audioMonitor.SetEnabled(_settings.EnableLiveBeats);
 
             RecomputeEffectiveTexture();
@@ -335,6 +335,11 @@ namespace DiffuseWindows
 
             _settings = updated;
             _audioMonitor.SetEnabled(_settings.EnableLiveBeats);
+            if (!_settings.EnableLiveBeats && _lastUiBpm != 0)
+            {
+                _lastUiBpm = 0;
+                _mainWindow?.UpdateLiveBeatsBpm(0);
+            }
 
             if (rebuildNeeded)
             {
@@ -425,12 +430,29 @@ namespace DiffuseWindows
             _mainWindow.UpdateMediaStatus(_lastMedia, _effectiveTexture);
         }
 
+        private int _lastUiBpm;
+
         private void OnAudioBands(double[] bands)
         {
             if (IsShuttingDown || !_settings.EnableLiveBeats) return;
             for (int i = 0; i < _hosts.Count; i++)
             {
                 _hosts[i].QueueAudioBands(bands);
+            }
+        }
+
+        private void OnBpmDetected(float bpm, float confidence)
+        {
+            if (IsShuttingDown || !_settings.EnableLiveBeats) return;
+            for (int i = 0; i < _hosts.Count; i++)
+            {
+                _hosts[i].QueueBpm(bpm, confidence);
+            }
+            int rounded = (bpm > 20f && confidence >= 0.25f) ? (int)Math.Round(bpm) : 0;
+            if (rounded != _lastUiBpm)
+            {
+                _lastUiBpm = rounded;
+                _mainWindow?.UpdateLiveBeatsBpm(rounded);
             }
         }
 

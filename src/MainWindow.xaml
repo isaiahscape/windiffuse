@@ -251,7 +251,7 @@
                         <Grid>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Live Beats" />
-                                <TextBlock Text="React to system audio FFT" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="LiveBeatsStatusText" Text="React to system audio FFT" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                             <ToggleSwitch x:Name="LiveBeatsToggle" HorizontalAlignment="Right" MinWidth="0" OnContent="" OffContent="" />
                         </Grid>

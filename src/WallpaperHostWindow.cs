@@ -26,6 +26,9 @@ namespace DiffuseWindows
         private bool _pendingPlaying;
         private double[] _pendingBands;
         private bool _hasPendingBands;
+        private float _pendingBpm;
+        private float _pendingBpmConfidence;
+        private bool _hasPendingBpm;
         private bool _pendingSettingsDirty = true;
         private volatile bool _globallyPaused;
         private readonly object _stateLock = new object();
@@ -220,6 +223,16 @@ namespace DiffuseWindows
             }
         }
 
+        public void QueueBpm(float bpm, float confidence)
+        {
+            lock (_stateLock)
+            {
+                _pendingBpm = bpm;
+                _pendingBpmConfidence = confidence;
+                _hasPendingBpm = true;
+            }
+        }
+
         private void StartRenderThread()
         {
             if (_renderThread != null || _hwnd == IntPtr.Zero) return;
@@ -301,6 +314,9 @@ namespace DiffuseWindows
 
                     Bitmap bitmapToApply = null;
                     double[] bandsToApply = null;
+                    float bpmToApply = 0f;
+                    float bpmConfidenceToApply = 0f;
+                    bool applyBpm = false;
                     bool playingNow;
                     AppSettings settingsSnapshot = null;
                     int targetFps;
@@ -321,6 +337,13 @@ namespace DiffuseWindows
                             bandsToApply = _pendingBands;
                             _pendingBands = null;
                             _hasPendingBands = false;
+                        }
+                        if (_hasPendingBpm)
+                        {
+                            bpmToApply = _pendingBpm;
+                            bpmConfidenceToApply = _pendingBpmConfidence;
+                            applyBpm = true;
+                            _hasPendingBpm = false;
                         }
                         if (_pendingSettingsDirty)
                         {
@@ -347,6 +370,10 @@ namespace DiffuseWindows
                     if (bandsToApply != null)
                     {
                         renderer.SetAudioBands(bandsToApply);
+                    }
+                    if (applyBpm)
+                    {
+                        renderer.SetBpm(bpmToApply, bpmConfidenceToApply);
                     }
                     if (bitmapToApply != null)
                     {

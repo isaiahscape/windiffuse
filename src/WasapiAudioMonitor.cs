@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -89,6 +90,8 @@ namespace DiffuseWindows
         }
 
         private readonly Action<double[]> _onBands;
+        private readonly Action<float, float> _onBpm;
+        private readonly BpmDetector _bpmDetector = new BpmDetector();
         private readonly float[] _ringBuffer = new float[FftSize];
         private readonly double[] _fftReal = new double[FftSize];
         private readonly double[] _fftImag = new double[FftSize];
@@ -100,9 +103,10 @@ namespace DiffuseWindows
         private volatile bool _running;
         private volatile bool _enabled;
 
-        public WasapiAudioMonitor(Action<double[]> onBands)
+        public WasapiAudioMonitor(Action<double[]> onBands, Action<float, float> onBpm = null)
         {
             _onBands = onBands;
+            _onBpm = onBpm;
             for (int i = 0; i < FftSize; i++)
             {
                 _hann[i] = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (FftSize - 1)));
@@ -121,7 +125,9 @@ namespace DiffuseWindows
             else
             {
                 StopWorker();
+                _bpmDetector.Reset();
                 _onBands(new double[4]);
+                _onBpm?.Invoke(0f, 0f);
             }
         }
 
@@ -219,6 +225,7 @@ namespace DiffuseWindows
                     int sampleRate = (int)fmt.nSamplesPerSec;
                     int channels = Math.Max(1, (int)fmt.nChannels);
                     int blockAlign = Math.Max(1, (int)fmt.nBlockAlign);
+                    Stopwatch clock = Stopwatch.StartNew();
 
                     while (_running && _enabled)
                     {
@@ -293,7 +300,10 @@ namespace DiffuseWindows
 
                         if (gotSamples)
                         {
-                            _onBands(ComputeBands(sampleRate));
+                            double[] bands = ComputeBands(sampleRate);
+                            BpmResult bpm = _bpmDetector.Update(bands, clock.Elapsed.TotalSeconds);
+                            _onBands(bands);
+                            _onBpm?.Invoke(bpm.Bpm, bpm.Confidence);
                         }
                     }
 
